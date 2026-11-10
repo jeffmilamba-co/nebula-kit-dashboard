@@ -1,0 +1,63 @@
+@import "tailwindcss";
+
+/* LinkedIn-style design tokens (Nebula-branded). */
+@theme {
+  --font-sans: -apple-system, system-ui, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "Fira Sans", Ubuntu,
+    Oxygen, "Oxygen Sans", Cantarell, "Droid Sans", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol",
+    "Lucida Grande", Helvetica, Arial, sans-serif;
+
+  --color-canvas: #f4f2ee;
+  --color-surface: #ffffff;
+  --color-brand: #0a66c2;
+  --color-brand-hover: #004182;
+  --color-brand-soft: #e8f1fb;
+  --color-ink: rgb(0 0 0 / 0.9);
+  --color-ink-2: rgb(0 0 0 / 0.6);
+  --color-ink-3: rgb(0 0 0 / 0.45);
+  --color-line: rgb(0 0 0 / 0.08);
+  --color-line-strong: rgb(0 0 0 / 0.15);
+  --color-hover: rgb(0 0 0 / 0.05);
+  --color-search: #edf3f8;
+  --color-success: #057642;
+  --color-success-soft: #e6f2ec;
+  --color-warning: #915907;
+  --color-warning-soft: #fdf2d8;
+  --color-danger: #cc1016;
+  --color-danger-soft: #fdecec;
+  --color-pill: #01754f;
+  --color-pill-hover: #004c33;
+
+  /* Chart status colors — validated with the dataviz palette checker (adjacent CVD ΔE ≥ 24). */
+  --color-health-ok: #6da7ec;
+  --color-health-risk: #fab219;
+  --color-health-overdue: #cc1016;
+  --color-health-closed: #c3c2b7;
+
+  --shadow-card: 0 0 0 1px rgb(140 140 140 / 0.2);
+  --shadow-pop: 0 0 0 1px rgb(140 140 140 / 0.25), 0 4px 16px rgb(0 0 0 / 0.14);
+}
+
+@layer base {
+  html {
+    color-scheme: light;
+  }
+  body {
+    background: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.4;
+    -webkit-font-smoothing: antialiased;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-brand);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+  button {
+    cursor: pointer;
+  }
+  button:disabled {
+    cursor: not-allowed;
+  }
+}
