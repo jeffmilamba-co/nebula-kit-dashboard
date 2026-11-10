@@ -37,6 +37,9 @@ function subscribe(listener: () => void) {
 
 const getSnapshot = () => current
 
+/** Current location outside React (e.g. to start loading the current page before the first render). */
+export const getLocation = (): Loc => current
+
 export function useLocation(): Loc {
   return useSyncExternalStore(subscribe, getSnapshot)
 }

@@ -1,5 +1,5 @@
 import { ACTIVE_STAGES, STAGES } from './config.ts'
-import { quantile } from './stats.ts'
+import { quantile, sortAsc } from './stats.ts'
 import { DAY_MS, dayStart, elapsedDays, utcDay, utcWeekStart } from './time.ts'
 import type { Filters, OrderSnapshot, Stage } from './types.ts'
 
@@ -39,7 +39,6 @@ export function kpis(snaps: OrderSnapshot[]): Kpis {
       if (created != null && s.completedAt != null) e2e.push(elapsedDays(created, s.completedAt))
     }
   }
-  e2e.sort((a, b) => a - b)
   return {
     orders: snaps.length,
     kitOrders,
@@ -49,7 +48,7 @@ export function kpis(snaps: OrderSnapshot[]): Kpis {
     finishedPct: kitOrders ? finished / kitOrders : null,
     overdue,
     atRisk,
-    medianOrderToReport: quantile(e2e, 0.5),
+    medianOrderToReport: quantile(sortAsc(e2e), 0.5),
     replacedKits,
   }
 }

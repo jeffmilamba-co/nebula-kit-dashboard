@@ -26,9 +26,9 @@ function UploadCard() {
   const handle = async (files: FileList | null) => {
     if (!files || files.length === 0) return
     setErrors(null)
-    const errs = await data.loadFiles([...files])
-    if (errs) setErrors(errs)
-    else navigate('/', '')
+    const result = await data.loadFiles([...files])
+    if (result.status === 'failed') setErrors(result.errors)
+    else if (result.status === 'loaded') navigate('/', '')
   }
 
   return (
@@ -86,7 +86,7 @@ function UploadCard() {
       )}
       {!data.isSample && (
         <div className="rounded-b-lg border-t border-line px-4 py-3">
-          <Button variant="tertiary" onClick={() => void data.loadSample().then(() => navigate('/', ''))}>
+          <Button variant="tertiary" onClick={() => void data.loadSample().then((r) => r.status === 'loaded' && navigate('/', ''))}>
             <RotateCcw size={16} aria-hidden /> Restore the sample data
           </Button>
         </div>
@@ -167,7 +167,7 @@ function ChecksCard() {
         title="Data checks"
         subtitle={`${fmtInt(q.orderRows)} order rows and ${fmtInt(q.eventRows)} event rows read from ${model.source.ordersName} and ${model.source.eventsName}.`}
       />
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Data checks table">
         <table className="w-full min-w-[560px] text-sm">
           <thead className="text-left text-xs text-ink-2">
             <tr className="border-t border-line">
@@ -204,7 +204,7 @@ function OrphansCard() {
         title={`Orphan events (${fmtInt(model.orphans.length)})`}
         subtitle="Kit events whose order_id isn’t in the orders file. They’re excluded from every count."
       />
-      <div className="max-h-[360px] overflow-auto rounded-b-lg border-t border-line">
+      <div className="max-h-[360px] overflow-auto rounded-b-lg border-t border-line" tabIndex={0} role="region" aria-label="Orphan events table">
         <table className="w-full min-w-[560px] text-xs">
           <thead className="sticky top-0 bg-surface text-left text-ink-2">
             <tr>

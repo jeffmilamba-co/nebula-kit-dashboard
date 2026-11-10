@@ -83,9 +83,17 @@ export function encodeFilters(f: Filters, o: DatasetOptions, base?: URLSearchPar
   return p
 }
 
-/** Stable key of just the filter params (so unrelated query changes don't re-filter). */
+/**
+ * Just the filter params, as a canonical query string: unrelated params (search, paging) are
+ * dropped and the order is fixed, so it works as a memo key and decodes to the same filters.
+ */
 export function filterKey(params: URLSearchParams): string {
-  return FILTER_PARAMS.map((k) => `${k}=${params.get(k) ?? ''}`).join('&')
+  const p = new URLSearchParams()
+  for (const k of FILTER_PARAMS) {
+    const v = params.get(k)
+    if (v != null) p.set(k, v)
+  }
+  return p.toString()
 }
 
 /** Order date filter compares UTC days, inclusive at both ends. */

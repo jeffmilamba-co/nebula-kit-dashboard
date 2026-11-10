@@ -63,7 +63,11 @@ describe('filters', () => {
     expect(pred(mkOrder({ status: 'refunded' }))).toBe(false)
   })
 
-  it('builds a stable key from filter params only', () => {
+  it('builds a stable key from filter params only, which decodes to the same filters', () => {
     expect(filterKey(new URLSearchParams('q=x&product=a'))).toBe(filterKey(new URLSearchParams('product=a&q=y')))
+    for (const q of ['', 'status=all&page=3', 'country=CA,US&test=1&q=ord_1', 'from=2026-06-01&product=wgs_100x']) {
+      const params = new URLSearchParams(q)
+      expect(decodeFilters(new URLSearchParams(filterKey(params)), options)).toEqual(decodeFilters(params, options))
+    }
   })
 })

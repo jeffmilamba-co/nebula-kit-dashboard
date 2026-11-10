@@ -87,57 +87,89 @@ function tally(values: string[], known: string[]): Record<string, number> {
   return out
 }
 
+/** Sort order for merging duplicates: rows with the same type and instant end up adjacent, preferred row first. */
+function duplicateOrder(a: KitEvent, b: KitEvent): number {
+  return (
+    a.at - b.at ||
+    (a.type < b.type ? -1 : a.type > b.type ? 1 : 0) ||
+    Number(a.tz === 'naive') - Number(b.tz === 'naive') ||
+    (a.eventId < b.eventId ? -1 : a.eventId > b.eventId ? 1 : 0)
+  )
+}
+
+/**
+ * Merges rows for the same type at the same instant (possibly written in different formats),
+ * keeping the row with an explicit timezone over a naive one, then the lowest event_id.
+ * Returns new event objects, so the caller's input is never mutated. `mergedEventIds` is only
+ * set on events that absorbed a duplicate (~2% of rows), rather than an empty array on every event.
+ */
+function mergeDuplicates(list: KitEvent[]): KitEvent[] {
+  list.sort(duplicateOrder)
+  const out: KitEvent[] = []
+  let keep: KitEvent | null = null
+  for (const e of list) {
+    if (keep && keep.type === e.type && keep.at === e.at) {
+      ;(keep.mergedEventIds ??= []).push(e.eventId)
+      continue
+    }
+    keep = { eventId: e.eventId, orderId: e.orderId, kitId: e.kitId, type: e.type, at: e.at, raw: e.raw, tz: e.tz, source: e.source }
+    out.push(keep)
+  }
+  return out.sort(compareEvents)
+}
+
+/** Lookup indexes over the order records (rebuilt after a model is streamed in from the loader worker). */
+export function indexRecords(records: OrderRecord[]): Pick<Model, 'byOrderId' | 'byKitId' | 'byCustomerId'> {
+  const byOrderId = new Map<string, OrderRecord>()
+  const byKitId = new Map<string, Kit[]>()
+  const byCustomerId = new Map<string, OrderRecord[]>()
+  for (const r of records) {
+    byOrderId.set(r.order.orderId, r)
+    for (const k of r.kits) {
+      const list = byKitId.get(k.kitId)
+      if (list) list.push(k)
+      else byKitId.set(k.kitId, [k])
+    }
+    if (r.order.customerId) {
+      const list = byCustomerId.get(r.order.customerId)
+      if (list) list.push(r)
+      else byCustomerId.set(r.order.customerId, [r])
+    }
+  }
+  return { byOrderId, byKitId, byCustomerId }
+}
+
+/** Everything in a Model except the records and the indexes derived from them. */
+export type ModelHead = Omit<Model, 'records' | 'byOrderId' | 'byKitId' | 'byCustomerId'>
+
+export function assembleModel(head: ModelHead, records: OrderRecord[]): Model {
+  return { ...head, records, ...indexRecords(records) }
+}
+
 export function buildModel(input: BuildInput): Model {
   const { orders, events } = input
   const orderById = new Map(orders.map((o) => [o.orderId, o]))
 
-  // 1. Merge duplicates: same order, kit, type and instant (possibly written in different formats).
-  //    Keep the row with an explicit timezone over a naive one, then the lowest event_id.
-  const unique = new Map<string, KitEvent>()
-  let duplicateEvents = 0
+  // 1. Group events by order, then by kit. Nested maps keyed by the raw IDs avoid building and
+  //    hashing a composite string key for every one of (possibly hundreds of thousands of) events.
+  const eventsByOrder = new Map<string, Map<string, KitEvent[]>>()
   for (const e of events) {
-    const key = `${e.orderId}|${e.kitId}|${e.type}|${e.at}`
-    const prev = unique.get(key)
-    if (!prev) {
-      unique.set(key, { ...e, mergedEventIds: [] })
-      continue
-    }
-    duplicateEvents++
-    const prevNaive = prev.tz === 'naive'
-    const nextNaive = e.tz === 'naive'
-    const preferNext = (prevNaive && !nextNaive) || (prevNaive === nextNaive && e.eventId < prev.eventId)
-    if (preferNext) unique.set(key, { ...e, mergedEventIds: [...prev.mergedEventIds, prev.eventId] })
-    else prev.mergedEventIds.push(e.eventId)
+    let kits = eventsByOrder.get(e.orderId)
+    if (!kits) eventsByOrder.set(e.orderId, (kits = new Map()))
+    const list = kits.get(e.kitId)
+    if (list) list.push(e)
+    else kits.set(e.kitId, [e])
   }
 
-  // 2. Split off orphans (order_id not in orders) and group the rest by kit.
-  const orphans: KitEvent[] = []
-  const kitEvents = new Map<string, KitEvent[]>()
-  const ordersPerKitId = new Map<string, Set<string>>()
-  for (const e of unique.values()) {
-    if (!orderById.has(e.orderId)) {
-      orphans.push(e)
-      continue
-    }
-    const key = `${e.orderId}|${e.kitId}`
-    let list = kitEvents.get(key)
-    if (!list) kitEvents.set(key, (list = []))
-    list.push(e)
-    let set = ordersPerKitId.get(e.kitId)
-    if (!set) ordersPerKitId.set(e.kitId, (set = new Set()))
-    set.add(e.orderId)
-  }
-  orphans.sort(compareEvents)
-
-  // 3. Build kits.
+  // Kit-level quality counters, filled in by buildKit.
   const unknownEventTypes: Record<string, number> = {}
   let repeatedMilestones = 0
   let eventsAfterReplacement = 0
   let qcRetests = 0
   let inconsistentQc = 0
-  const kitsByOrder = new Map<string, Kit[]>()
-  for (const [key, list] of kitEvents) {
-    list.sort(compareEvents)
+
+  /** One kit from its deduplicated, time-ordered events. */
+  const buildKit = (key: string, list: KitEvent[]): Kit => {
     const replacedAt = list.find((e) => e.type === 'kit_replaced')?.at ?? null
     const firstOf: Kit['firstOf'] = {}
     const qcEvents: Kit['qcEvents'] = []
@@ -165,7 +197,7 @@ export function buildModel(input: BuildInput): Model {
     const latestQc = qcEvents[qcEvents.length - 1]
     if (latestQc?.type === 'qc_failed' && (firstOf.sequencing_complete != null || firstOf.report_ready != null)) inconsistentQc++
     const first = list[0]
-    const kit: Kit = {
+    return {
       key,
       kitId: first.kitId,
       orderId: first.orderId,
@@ -179,10 +211,41 @@ export function buildModel(input: BuildInput): Model {
       successorKey: null,
       replacementReason: null,
     }
-    let kits = kitsByOrder.get(first.orderId)
-    if (!kits) kitsByOrder.set(first.orderId, (kits = []))
-    kits.push(kit)
   }
+
+  // 2. Per kit: merge duplicates, split off orphans (order_id not in orders), build the kit.
+  //    Also track the latest timestamps (the default "as of") and kit IDs reused across orders.
+  const latest: QualityReport['latestTimestamps'] = []
+  const beatsLatest = (at: number) => latest.length < 3 || at > latest[latest.length - 1].at
+  const considerLatest = (at: number, raw: string, where: string) => {
+    latest.push({ at, raw, where })
+    latest.sort((a, b) => b.at - a.at)
+    if (latest.length > 3) latest.pop()
+  }
+  const orphans: KitEvent[] = []
+  const firstOrderOfKitId = new Map<string, string>()
+  const sharedKitIds = new Set<string>()
+  let duplicateEvents = 0
+  const kitsByOrder = new Map<string, Kit[]>()
+  for (const [orderId, kitGroups] of eventsByOrder) {
+    const isOrphan = !orderById.has(orderId)
+    const orderKits: Kit[] = []
+    for (const [kitId, rows] of kitGroups) {
+      const list = mergeDuplicates(rows)
+      duplicateEvents += rows.length - list.length
+      for (const e of list) if (beatsLatest(e.at)) considerLatest(e.at, e.raw, `${e.type} · ${e.kitId}`)
+      if (isOrphan) {
+        orphans.push(...list)
+        continue
+      }
+      const owner = firstOrderOfKitId.get(kitId)
+      if (owner === undefined) firstOrderOfKitId.set(kitId, orderId)
+      else if (owner !== orderId) sharedKitIds.add(kitId)
+      orderKits.push(buildKit(`${orderId}|${kitId}`, list))
+    }
+    if (orderKits.length) kitsByOrder.set(orderId, orderKits)
+  }
+  orphans.sort(compareEvents)
 
   // 4. Order records, replacement chains and per-order quality checks.
   const records: OrderRecord[] = []
@@ -233,40 +296,13 @@ export function buildModel(input: BuildInput): Model {
     records.push({ order, kits, hasKitPipeline: !NO_KIT_PRODUCTS.has(order.product) || kits.length > 0 })
   }
 
-  let kitsOnMultipleOrders = 0
-  for (const set of ordersPerKitId.values()) if (set.size > 1) kitsOnMultipleOrders++
-
-  // 5. Indexes.
-  const byOrderId = new Map(records.map((r) => [r.order.orderId, r]))
-  const byKitId = new Map<string, Kit[]>()
-  const byCustomerId = new Map<string, OrderRecord[]>()
-  for (const r of records) {
-    for (const k of r.kits) {
-      const list = byKitId.get(k.kitId)
-      if (list) list.push(k)
-      else byKitId.set(k.kitId, [k])
-    }
-    if (r.order.customerId) {
-      const list = byCustomerId.get(r.order.customerId)
-      if (list) list.push(r)
-      else byCustomerId.set(r.order.customerId, [r])
-    }
+  // 5. Latest timestamps anywhere in the data (the default "as of"); events were considered in step 2.
+  for (const o of orders) {
+    if (o.createdAt != null && beatsLatest(o.createdAt)) considerLatest(o.createdAt, o.createdRaw, `order created · ${o.orderId}`)
   }
-
-  // 6. Latest timestamps anywhere in the data (the default "as of").
-  const latest: QualityReport['latestTimestamps'] = []
-  const consider = (at: number, raw: string, where: string) => {
-    if (latest.length < 3 || at > latest[latest.length - 1].at) {
-      latest.push({ at, raw, where })
-      latest.sort((a, b) => b.at - a.at)
-      if (latest.length > 3) latest.pop()
-    }
-  }
-  for (const e of unique.values()) consider(e.at, e.raw, `${e.type} · ${e.kitId}`)
-  for (const o of orders) if (o.createdAt != null) consider(o.createdAt, o.createdRaw, `order created · ${o.orderId}`)
   const maxTimestamp = latest.length ? latest[0].at : Date.now()
 
-  // 7. Filter options derived from the data.
+  // 6. Filter options derived from the data.
   const days = orders.map((o) => o.createdDay).filter((d): d is string => d != null).sort()
   const options: DatasetOptions = {
     products: rankedValues(orders.map((o) => o.product), KNOWN_PRODUCTS),
@@ -294,7 +330,7 @@ export function buildModel(input: BuildInput): Model {
     unknownStatuses: tally(orders.map((o) => o.status), KNOWN_STATUSES),
     repeatedMilestones,
     eventsAfterReplacement,
-    kitsOnMultipleOrders,
+    kitsOnMultipleOrders: sharedKitIds.size,
     eventsBeforeOrder,
     missingScans,
     kitsWithMissingScan,
@@ -313,15 +349,5 @@ export function buildModel(input: BuildInput): Model {
     latestTimestamps: latest,
   }
 
-  return {
-    records,
-    byOrderId,
-    byKitId,
-    byCustomerId,
-    orphans,
-    maxTimestamp,
-    options,
-    quality,
-    source: input.names,
-  }
+  return assembleModel({ orphans, maxTimestamp, options, quality, source: input.names }, records)
 }

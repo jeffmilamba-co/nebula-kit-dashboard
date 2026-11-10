@@ -88,8 +88,8 @@ export interface KitEvent {
   raw: string
   tz: TzKind
   source: string
-  /** event_ids of duplicate rows (same kit, type and instant) merged into this one. */
-  mergedEventIds: string[]
+  /** event_ids of duplicate rows (same kit, type and instant) merged into this one; absent when none. */
+  mergedEventIds?: string[]
   /** Why this event does not count toward state/durations, if it doesn't. */
   ignored?: 'after_replacement' | 'repeat' | 'unknown_type'
 }

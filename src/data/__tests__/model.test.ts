@@ -18,7 +18,7 @@ describe('dedupe, orphans and kits', () => {
     expect(kit.events).toHaveLength(1)
     // Prefers a row with an explicit zone, then the lowest event_id.
     expect(kit.events[0].eventId).toBe('evt_b')
-    expect(kit.events[0].mergedEventIds.sort()).toEqual(['evt_a', 'evt_c'])
+    expect(kit.events[0].mergedEventIds?.toSorted()).toEqual(['evt_a', 'evt_c'])
     expect(m.quality.duplicateEvents).toBe(2)
   })
 
@@ -113,8 +113,9 @@ describe('dedupe, orphans and kits', () => {
   })
 })
 
+const single = (type: string) => build([order('ord_1', 0)], [ev('ord_1', 'kit_1', type, iso(2))])
+
 describe('kit state and order stage', () => {
-  const single = (type: string) => build([order('ord_1', 0)], [ev('ord_1', 'kit_1', type, iso(2))])
 
   it.each([
     ['kit_shipped', 'to_customer'],
@@ -137,7 +138,7 @@ describe('kit state and order stage', () => {
     )
     const s = snapshotOrder(m.byOrderId.get('ord_1')!, at(21))
     expect(s.stage).toBe('lab_qc')
-    expect(s.transitions.map((t) => t.key).sort()).toEqual(['order_to_ship', 'ship_to_deliver'])
+    expect(s.transitions.map((t) => t.key).toSorted()).toEqual(['order_to_ship', 'ship_to_deliver'])
   })
 
   it('a QC failure with no replacement logged waits on a replacement, clock from qc_failed', () => {

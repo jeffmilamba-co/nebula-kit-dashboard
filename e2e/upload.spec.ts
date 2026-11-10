@@ -80,7 +80,7 @@ test.describe('Requirement 6: load a different pair of CSVs', () => {
     await expect(kpiValue(page, 'In the pipeline')).toHaveText(n(expected.kpis.inPipeline))
     await expect(page.getByRole('region', { name: 'Pipeline at a glance' })).toContainText('Not shown: 1 refunded · 1 test orders')
 
-    await page.getByRole('link', { name: 'Follow-up', exact: true }).click()
+    await page.getByRole('link', { name: /^Follow-up( \d+\+? overdue)?$/ }).click()
     await expect(heading1(page)).toHaveText('3 orders need follow-up')
     await expect(page.getByRole('link', { name: 'e2e_o4' })).toBeVisible() // QC failed, no replacement logged
     await expect(page.getByText('QC failed with no replacement logged: issue and ship a replacement kit')).toBeVisible()
@@ -92,7 +92,7 @@ test.describe('Requirement 6: load a different pair of CSVs', () => {
     await expect(page.getByRole('heading', { level: 3, name: /^Kit k[A-D]$/ })).toHaveCount(4)
 
     await page.getByRole('link', { name: 'Data', exact: true }).click()
-    const checks = page.getByRole('region', { name: 'Data checks' })
+    const checks = page.getByRole('region', { name: 'Data checks', exact: true })
     const found = (label: string) => checks.getByRole('row', { name: new RegExp(`^${label}`) }).locator('td').nth(1)
     await expect(found('Duplicate events merged')).toHaveText('2')
     await expect(found('Events for orders not in the orders file')).toHaveText('1')
@@ -120,7 +120,7 @@ test.describe('Requirement 6: load a different pair of CSVs', () => {
     await expect(alert).toContainText('Please choose two files')
 
     // Still the sample data.
-    await expect(page.getByRole('region', { name: 'Data checks' })).toContainText(
+    await expect(page.getByRole('region', { name: 'Data checks', exact: true })).toContainText(
       `${n(sample.quality.orderRows)} order rows and ${n(sample.quality.eventRows)} event rows`,
     )
   })

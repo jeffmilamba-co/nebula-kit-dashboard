@@ -20,7 +20,7 @@ export default defineConfig({
   },
   projects: [
     { name: 'desktop', use: { viewport: { width: 1280, height: 900 } }, grepInvert: /@mobile/ },
-    { name: 'mobile', use: { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true }, grep: /@mobile/ },
+    { name: 'mobile', use: { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true }, grep: /@mobile|@a11y/ },
   ],
   webServer: external
     ? undefined

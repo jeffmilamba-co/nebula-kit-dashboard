@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { snapshotOrder } from '../state.ts'
-import { quantile, stageStats } from '../stats.ts'
+import { quantile, sortAsc, stageStats } from '../stats.ts'
 import { at, build, ev, iso, order } from './fixtures.ts'
 
 describe('quantile (R-7)', () => {
@@ -9,6 +9,12 @@ describe('quantile (R-7)', () => {
     expect(quantile([1, 2, 3, 4], 0.9)).toBeCloseTo(3.7)
     expect(quantile([5], 0.9)).toBe(5)
     expect(quantile([], 0.5)).toBeNull()
+  })
+
+  it('sorts numerically into a typed array without touching the input', () => {
+    const input = [10, 9, 1.5, 100, -2]
+    expect([...sortAsc(input)]).toEqual([-2, 1.5, 9, 10, 100])
+    expect(input).toEqual([10, 9, 1.5, 100, -2])
   })
 })
 

@@ -1,28 +1,42 @@
+import { Suspense, useEffect } from 'react'
 import { useData, DataProvider } from './DataProvider.tsx'
 import { DerivedProvider, useDerived } from './derived.tsx'
+import { PageErrorBoundary } from './ErrorBoundary.tsx'
+import { Pages, prefetchAllPages, sectionOf } from './pages.tsx'
 import { FilterBar } from '../layout/FilterBar.tsx'
 import { TopNav } from '../layout/TopNav.tsx'
 import { Button } from '../ui/Button.tsx'
-import { DataView } from '../views/DataView.tsx'
-import { FollowUpView } from '../views/FollowUpView.tsx'
-import { OrdersView } from '../views/OrdersView.tsx'
-import { OverviewView } from '../views/OverviewView.tsx'
-import { TurnaroundView } from '../views/TurnaroundView.tsx'
+
+/** Shown for the moment a page's code is still downloading. */
+function PageSkeleton() {
+  return (
+    <div className="mx-auto max-w-[1128px] px-4 py-6" aria-busy="true" aria-label="Loading page">
+      <div className="h-40 animate-pulse rounded-lg bg-surface shadow-card" />
+      <div className="mt-2 h-72 animate-pulse rounded-lg bg-surface shadow-card" />
+    </div>
+  )
+}
 
 function Routes() {
   const { loc, linkTo } = useDerived()
-  const [, section = '', id] = loc.path.split('/')
-  switch (section) {
+  const [, , id] = loc.path.split('/')
+  let page
+  switch (sectionOf(loc.path)) {
     case '':
-      return <OverviewView />
+      page = <Pages.Overview />
+      break
     case 'turnaround':
-      return <TurnaroundView />
+      page = <Pages.Turnaround />
+      break
     case 'follow-up':
-      return <FollowUpView />
+      page = <Pages.FollowUp />
+      break
     case 'orders':
-      return <OrdersView orderId={id ? decodeURIComponent(id) : null} />
+      page = <Pages.Orders orderId={id ? decodeURIComponent(id) : null} />
+      break
     case 'data':
-      return <DataView />
+      page = <Pages.Data />
+      break
     default:
       return (
         <div className="mx-auto max-w-[1128px] px-4 py-16 text-center">
@@ -33,10 +47,18 @@ function Routes() {
         </div>
       )
   }
+  return (
+    // Not keyed on the path: picking another order in the split view must not remount the list.
+    <PageErrorBoundary resetKey={loc.path} homeHref={linkTo('/')}>
+      <Suspense fallback={<PageSkeleton />}>{page}</Suspense>
+    </PageErrorBoundary>
+  )
 }
 
 function Shell() {
   const data = useData()
+  const ready = data.model != null
+  useEffect(() => (ready ? prefetchAllPages() : undefined), [ready])
   if (!data.model) {
     return (
       <div className="flex min-h-screen items-center justify-center px-4">

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { useDerived } from '../app/derived.tsx'
 import { NO_KIT_PRODUCTS, TRANSITIONS } from '../data/config.ts'
 import type { TransitionInfo } from '../data/config.ts'
-import { quantile, stageStats } from '../data/stats.ts'
+import { quantile, sortAsc, stageStats } from '../data/stats.ts'
 import { elapsedDays } from '../data/time.ts'
 import type { StageStats } from '../data/types.ts'
 import { MainWithRail } from '../layout/Columns.tsx'
@@ -111,8 +111,7 @@ export function TurnaroundView() {
       list.push(elapsedDays(s.rec.order.createdAt, s.completedAt))
       m.set(s.rec.order.product, list)
     }
-    for (const list of m.values()) list.sort((a, b) => a - b)
-    return m
+    return new Map([...m].map(([p, list]) => [p, sortAsc(list)]))
   }, [visible])
 
   // Biggest median gap between products across the brief's seven steps, to answer

@@ -15,17 +15,23 @@ test.describe('Requirement 1: overall pipeline health (volume, where kits are, h
 
     const where = page.getByRole('region', { name: 'Where kits are now' })
     for (const s of base.stages) {
-      await expect(where.getByRole('link', { name: new RegExp(`^${s.label}: ${s.total} orders`) })).toBeVisible()
+      await expect(where.getByRole('link', { name: new RegExp(`^${s.label} ${n(s.total)} orders`) })).toBeVisible()
     }
     await expect(where).toContainText(`${n(base.kpis.finished)} orders have their report ready`)
   })
 
-  test('weekly volume renders as a chart and as a table', async ({ page }) => {
+  test('weekly volume renders as a keyboard-readable chart and as a table', async ({ page }) => {
     await open(page)
     const volume = page.getByRole('region', { name: 'Orders placed per week' })
-    await expect(volume.locator('.recharts-bar-rectangle').first()).toBeVisible()
+    const chart = volume.getByRole('group', { name: /^Orders placed per week, stacked by product/ })
+    await chart.focus()
+    await chart.press('End')
+    const last = base.weeks[base.weeks.length - 1]
+    await expect(volume.getByRole('status')).toContainText(`${n(last.total)} total`)
+    await chart.press('Home')
+    await expect(volume.getByRole('status')).toContainText(`${n(base.weeks[0].total)} total`)
     await volume.getByRole('button', { name: 'Table' }).click()
-    await expect(volume.getByRole('row')).toHaveCount(base.weeks + 1)
+    await expect(volume.getByRole('row')).toHaveCount(base.weeks.length + 1)
   })
 })
 
@@ -57,7 +63,7 @@ test.describe('Requirement 3: find kits that are stuck and need follow-up', () =
   test('a stage on the overview opens its follow-up queue, narrowed by customer age band', async ({ page }) => {
     await open(page)
     const wc = base.stages.find((s) => s.stage === 'with_customer')!
-    await page.getByRole('link', { name: /^With customer: / }).click()
+    await page.getByRole('link', { name: /^With customer \d/ }).click()
     await expect(page).toHaveURL(/#\/follow-up\?.*stage=with_customer/)
     await expect(heading1(page)).toHaveText(`${n(wc.overdue + wc.atRisk)} orders need follow-up`)
 
@@ -125,6 +131,19 @@ test.describe('Requirement 4: drill into a single order', () => {
     await expect(page.getByText(/reference an order\s+that isn’t in the orders file/)).toBeVisible()
     await open(page, '#/orders/ord_sgosv')
     await expect(page.getByText(/This ID isn’t in the orders file/)).toBeVisible()
+  })
+
+  test('picking orders in the split view keeps the list as it was', async ({ page }) => {
+    await open(page, '#/orders')
+    const box = page.getByLabel('Filter orders by ID')
+    await box.fill('ord_9') // typed, not submitted: lives only in the list's local state
+    const orders = page.getByRole('link', { name: /^ord_\w+/ })
+    const second = decodeURIComponent((await orders.nth(1).getAttribute('href'))!.match(/#\/orders\/([^?]+)/)![1])
+    await orders.first().click()
+    await expect(heading1(page)).toHaveText(/^ord_\w+$/)
+    await orders.nth(1).click()
+    await expect(heading1(page)).toHaveText(second)
+    await expect(box).toHaveValue('ord_9')
   })
 
   test('the order list filters by ID and opens an order', async ({ page }) => {
@@ -197,7 +216,7 @@ test.describe('Requirement 5: narrow things down by date, product or country', (
 test.describe('Navigation', () => {
   test('tabs, browser back/forward and unknown routes', async ({ page }) => {
     await open(page)
-    await page.getByRole('link', { name: 'Follow-up', exact: true }).click()
+    await page.getByRole('link', { name: /^Follow-up( \d+\+? overdue)?$/ }).click()
     await expect(page).toHaveURL(/#\/follow-up/)
     await page.getByRole('link', { name: 'Orders', exact: true }).click()
     await expect(page).toHaveURL(/#\/orders$/)

@@ -100,11 +100,13 @@ function TookLine({ t }: { t: Transition }) {
   )
 }
 
+/** 'order|kit' → 'kit'. */
+const kitIdOf = (key: string | null) => (key ? key.slice(key.indexOf('|') + 1) : null)
+
 function KitItem({ kit, snap, asOf }: { kit: Kit; snap: OrderSnapshot; asOf: number }) {
   const rows = buildRows(kit, snap)
   const state = kitStateAt(kit, asOf).state
   const isCurrent = snap.currentKit?.key === kit.key && state !== 'replaced'
-  const kitIdOf = (key: string | null) => (key ? key.slice(key.indexOf('|') + 1) : null)
   const pred = kitIdOf(kit.predecessorKey)
   const succ = kitIdOf(kit.successorKey)
   const counted = kit.events.filter((e) => !e.ignored)
@@ -133,10 +135,10 @@ function KitItem({ kit, snap, asOf }: { kit: Kit; snap: OrderSnapshot; asOf: num
           {fmtDate(kit.firstAt)} – {open ? 'now' : fmtDate(last)} · {fmtDays(Math.max(0, (end - kit.firstAt) / 86_400_000))}
         </p>
         <ol className="mt-3">
-          {rows.map((r, i) => {
+          {rows.map((r) => {
             if (r.kind === 'missing') {
               return (
-                <TimelineItem key={`m${i}`} dot={<span className="block size-[11px] rounded-full border-2 border-dashed border-ink-3 bg-surface" />}>
+                <TimelineItem key={`missing:${r.label}`} dot={<span className="block size-[11px] rounded-full border-2 border-dashed border-ink-3 bg-surface" />}>
                   <div className="text-sm text-ink-2">{r.label}</div>
                   <div className="text-xs text-ink-3 italic">No scan recorded. The kit clearly passed this step, so it isn’t timed.</div>
                 </TimelineItem>
@@ -171,7 +173,7 @@ function KitItem({ kit, snap, asOf }: { kit: Kit; snap: OrderSnapshot; asOf: num
                   : '#0a66c2'
             const notes = [
               e.tz === 'naive' ? 'no timezone in the file: read as UTC' : null,
-              e.mergedEventIds.length ? `merged duplicate${e.mergedEventIds.length > 1 ? 's' : ''} ${e.mergedEventIds.join(', ')}` : null,
+              e.mergedEventIds ? `merged duplicate${e.mergedEventIds.length > 1 ? 's' : ''} ${e.mergedEventIds.join(', ')}` : null,
               e.ignored ? IGNORED_LABEL[e.ignored] : null,
             ].filter(Boolean)
             return (
@@ -222,10 +224,10 @@ const productShort = (p: string) => (p === 'wgs_30x' ? '30x' : p === 'wgs_100x' 
 export function OrderDetail({ snap, inFilter, backHref }: { snap: OrderSnapshot; inFilter: boolean; backHref: string }) {
   const { asOf } = useDerived()
   const o = snap.rec.order
-  const kits = [...snap.rec.kits].reverse()
+  const kits = snap.rec.kits.toReversed()
   const owner = STAGES[snap.stage].owner
   const events = snap.rec.kits.flatMap((k) => k.events)
-  const merged = events.reduce((n, e) => n + e.mergedEventIds.length, 0)
+  const merged = events.reduce((n, e) => n + (e.mergedEventIds?.length ?? 0), 0)
   const showCallout = snap.actionable && (snap.health === 'overdue' || snap.health === 'at_risk')
 
   return (
@@ -335,7 +337,7 @@ export function OrderDetail({ snap, inFilter, backHref }: { snap: OrderSnapshot;
           <summary className="cursor-pointer text-sm font-semibold text-ink-2 hover:text-ink">
             Raw events ({events.length} kept{merged ? `, ${merged} duplicate${merged > 1 ? 's' : ''} merged` : ''})
           </summary>
-          <div className="mt-2 overflow-x-auto">
+          <div className="mt-2 overflow-x-auto" tabIndex={0} role="region" aria-label="Raw events table">
             <table className="w-full min-w-[640px] text-xs">
               <thead className="text-left text-ink-2">
                 <tr>
@@ -348,8 +350,8 @@ export function OrderDetail({ snap, inFilter, backHref }: { snap: OrderSnapshot;
                 </tr>
               </thead>
               <tbody className="font-mono">
-                {[...events]
-                  .sort((a, b) => a.at - b.at)
+                {events
+                  .toSorted((a, b) => a.at - b.at)
                   .map((e) => (
                     <tr key={e.eventId} className="border-t border-line">
                       <td className="py-1.5 pr-2">{e.eventId}</td>
@@ -360,7 +362,7 @@ export function OrderDetail({ snap, inFilter, backHref }: { snap: OrderSnapshot;
                       <td className="py-1.5 font-sans text-ink-2">
                         {[
                           e.tz === 'naive' ? 'naive → UTC' : null,
-                          e.mergedEventIds.length ? `+ ${e.mergedEventIds.join(', ')}` : null,
+                          e.mergedEventIds ? `+ ${e.mergedEventIds.join(', ')}` : null,
                           e.ignored ?? null,
                         ]
                           .filter(Boolean)

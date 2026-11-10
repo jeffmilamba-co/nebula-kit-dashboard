@@ -24,6 +24,7 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - run: npm run lint
       - run: npm test
       - run: npm run build
         env:
@@ -43,7 +44,8 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      # Uses the runner's preinstalled Google Chrome (channel: 'chrome'); builds and serves the app itself.
+      # Requirement flows plus axe accessibility scans, in the runner's preinstalled Google Chrome
+      # (channel: 'chrome'); Playwright builds and serves the app itself.
       - run: npx playwright test
 
   deploy:

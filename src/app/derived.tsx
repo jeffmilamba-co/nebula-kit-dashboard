@@ -47,10 +47,10 @@ export function DerivedProvider({ model, children }: { model: Model; children: R
   const snapshots = useMemo(() => buildSnapshot(model, asOf), [model, asOf])
   const snapByOrder = useMemo(() => new Map(snapshots.map((s) => [s.rec.order.orderId, s])), [snapshots])
 
-  // Re-decode only when filter params change (keyed on fKey), not on every query change
-  // such as search or paging — so the filtered slice keeps its identity.
+  // Decoded from the filter params alone (fKey), so other query changes such as search or paging
+  // keep the same filters object — and everything downstream keeps its memoized result.
   const fKey = filterKey(params)
-  const filters = useMemo(() => decodeFilters(new URLSearchParams(loc.query), model.options), [fKey, model])
+  const filters = useMemo(() => decodeFilters(new URLSearchParams(fKey), model.options), [fKey, model.options])
   const deferredFilters = useDeferredValue(filters)
   const visible = useMemo(() => {
     const pred = compileFilter(deferredFilters)

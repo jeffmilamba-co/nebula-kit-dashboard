@@ -1,23 +1,17 @@
 // Entry point: two CSV texts in, a Model out. Takes strings (not Files) so it runs in Node tests
-// and could move into a Web Worker unchanged.
+// and in the loader Web Worker (src/app/loader.worker.ts) unchanged.
 import { detectKind, missingColumns, parseCsv } from './csv.ts'
 import type { CsvTable, FileKind } from './csv.ts'
+import { LoadError } from './loadError.ts'
 import { buildModel } from './model.ts'
 import { normalizeEvents, normalizeOrders } from './normalize.ts'
 import type { Model } from './types.ts'
 
+export { LoadError }
+
 export interface NamedText {
   name: string
   text: string
-}
-
-export class LoadError extends Error {
-  readonly messages: string[]
-  constructor(messages: string[]) {
-    super(messages.join('\n'))
-    this.name = 'LoadError'
-    this.messages = messages
-  }
 }
 
 const KIND_LABEL: Record<FileKind, string> = { orders: 'orders', events: 'kit events' }

@@ -1,7 +1,9 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, startTransition, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { LoadError, loadDataset } from '../data/pipeline.ts'
+import { LoadError } from '../data/loadError.ts'
 import type { Model } from '../data/types.ts'
+import { loadModel } from './loader.ts'
+import type { LoadSource } from './loader.ts'
 
 interface DataState {
   status: 'loading' | 'ready' | 'error'
@@ -11,60 +13,85 @@ interface DataState {
   busy: boolean
 }
 
+/** `cancelled`: a newer load (another upload, or restoring the sample) replaced this one. */
+export type LoadResult = { status: 'loaded' } | { status: 'failed'; errors: string[] } | { status: 'cancelled' }
+
 export interface DataApi extends DataState {
-  /** Returns error messages, or null on success. The current dataset stays loaded on failure. */
-  loadFiles: (files: File[]) => Promise<string[] | null>
-  loadSample: () => Promise<void>
+  /** Loads an uploaded pair of files. On failure the current dataset stays loaded. */
+  loadFiles: (files: File[]) => Promise<LoadResult>
+  loadSample: () => Promise<LoadResult>
 }
 
 const DataContext = createContext<DataApi | null>(null)
 
-async function fetchText(path: string): Promise<string> {
-  const res = await fetch(`${import.meta.env.BASE_URL}${path}`)
-  if (!res.ok) throw new Error(`Couldn’t load ${path} (HTTP ${res.status}).`)
-  return res.text()
+const SAMPLE_FILES = ['orders.csv', 'kit_events.csv']
+
+/**
+ * The bundled sample, fetched as soon as the app mounts (the entry bundle is small, so that is early).
+ * Deliberately not a <link rel=preload as=fetch> in index.html: in Chrome 157, taking over a
+ * still-downloading preload of the 1.8 MB events file intermittently failed with "Failed to fetch".
+ */
+function fetchSample(signal: AbortSignal): Promise<LoadSource[]> {
+  return Promise.all(
+    SAMPLE_FILES.map(async (name) => {
+      const path = `data/${name}`
+      const res = await fetch(`${import.meta.env.BASE_URL}${path}`, { signal })
+      if (!res.ok) throw new Error(`Couldn’t load ${path} (HTTP ${res.status}).`)
+      return { name, blob: await res.blob() }
+    }),
+  )
 }
 
-/** Let the browser paint the "loading" state before the synchronous parse. */
-const nextFrame = () => new Promise<void>((resolve) => setTimeout(resolve, 0))
-
-const messageOf = (e: unknown) => (e instanceof Error ? e.message : String(e))
+const messagesOf = (err: unknown) => (err instanceof LoadError ? err.messages : [err instanceof Error ? err.message : String(err)])
 
 export function DataProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<DataState>({ status: 'loading', model: null, error: null, isSample: true, busy: true })
+  const inFlight = useRef<AbortController | null>(null)
 
-  const loadSample = useCallback(async () => {
-    setState((s) => ({ ...s, busy: true }))
+  /** Runs one load. Starting another cancels it: the latest request always wins. */
+  const run = useCallback(async (getSources: (signal: AbortSignal) => Promise<LoadSource[]>, isSample: boolean): Promise<LoadResult> => {
+    inFlight.current?.abort()
+    const ctrl = new AbortController()
+    inFlight.current = ctrl
+    setState((s) => (s.busy ? s : { ...s, busy: true })) // same object when already busy: no re-render
     try {
-      const [orders, events] = await Promise.all([fetchText('data/orders.csv'), fetchText('data/kit_events.csv')])
-      await nextFrame()
-      const model = loadDataset({ name: 'orders.csv', text: orders }, { name: 'kit_events.csv', text: events })
-      setState({ status: 'ready', model, error: null, isSample: true, busy: false })
+      const model = await loadModel(getSources(ctrl.signal), ctrl.signal)
+      if (ctrl.signal.aborted) return { status: 'cancelled' }
+      // A transition lets React render the new dataset in slices, yielding to the browser in between,
+      // instead of one long task for every view, chart and derived list at once.
+      startTransition(() => setState({ status: 'ready', model, error: null, isSample, busy: false }))
+      return { status: 'loaded' }
     } catch (err) {
-      const error = err instanceof LoadError ? err.messages : [messageOf(err)]
-      setState((s) => ({ ...s, status: s.model ? 'ready' : 'error', error, busy: false }))
+      if (ctrl.signal.aborted) return { status: 'cancelled' }
+      const errors = messagesOf(err)
+      // A failed upload leaves the current dataset in place; a failed sample load with nothing loaded is fatal.
+      setState((s) => ({ ...s, status: s.model ? 'ready' : 'error', error: isSample ? errors : s.error, busy: false }))
+      return { status: 'failed', errors }
+    } finally {
+      if (inFlight.current === ctrl) inFlight.current = null
     }
   }, [])
 
-  const loadFiles = useCallback(async (files: File[]) => {
-    if (files.length !== 2) {
-      return [`Please choose two files: the orders export and the kit events export (you chose ${files.length}).`]
-    }
-    setState((s) => ({ ...s, busy: true }))
-    try {
-      const texts = await Promise.all(files.map((f) => f.text()))
-      await nextFrame()
-      const model = loadDataset({ name: files[0].name, text: texts[0] }, { name: files[1].name, text: texts[1] })
-      setState({ status: 'ready', model, error: null, isSample: false, busy: false })
-      return null
-    } catch (err) {
-      setState((s) => ({ ...s, busy: false }))
-      return err instanceof LoadError ? err.messages : [messageOf(err)]
-    }
-  }, [])
+  const loadSample = useCallback(() => run(fetchSample, true), [run])
+
+  const loadFiles = useCallback(
+    async (files: File[]): Promise<LoadResult> => {
+      if (files.length !== 2) {
+        return {
+          status: 'failed',
+          errors: [`Please choose two files: the orders export and the kit events export (you chose ${files.length}).`],
+        }
+      }
+      return run(async () => files.map((f) => ({ name: f.name, blob: f })), false)
+    },
+    [run],
+  )
 
   useEffect(() => {
+    // The state starts busy, so this first load's busy update bails out without a render.
+    // oxlint-disable-next-line react/set-state-in-effect
     void loadSample()
+    return () => inFlight.current?.abort()
   }, [loadSample])
 
   const api = useMemo<DataApi>(() => ({ ...state, loadFiles, loadSample }), [state, loadFiles, loadSample])

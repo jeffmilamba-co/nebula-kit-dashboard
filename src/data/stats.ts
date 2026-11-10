@@ -1,8 +1,16 @@
 import { STAGES, TARGET_DAYS, TRANSITIONS } from './config.ts'
 import type { OrderSnapshot, StageStats, TransitionKey } from './types.ts'
 
+/**
+ * Ascending copy as a Float64Array. Typed arrays sort numerically in native code, several times
+ * faster than Array#sort with a comparator callback; these lists are re-sorted on every filter change.
+ */
+export function sortAsc(values: readonly number[]): Float64Array {
+  return Float64Array.from(values).sort()
+}
+
 /** Quantile of an ascending-sorted array, linear interpolation between ranks (R-7, as in Excel/NumPy). */
-export function quantile(sortedAsc: number[], q: number): number | null {
+export function quantile(sortedAsc: ArrayLike<number>, q: number): number | null {
   if (sortedAsc.length === 0) return null
   const pos = (sortedAsc.length - 1) * q
   const lo = Math.floor(pos)
@@ -56,7 +64,7 @@ export function stageStats(
     out.set(
       g,
       TRANSITIONS.map(({ key }) => {
-        const d = (acc.durations.get(key) ?? []).sort((a, b) => a - b)
+        const d = sortAsc(acc.durations.get(key) ?? [])
         const within = acc.within.get(key) ?? 0
         const overdueNow = acc.overdue.get(key) ?? 0
         const denom = d.length + overdueNow

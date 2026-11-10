@@ -40,7 +40,7 @@ export function OrdersView({ orderId }: { orderId: string | null }) {
   const visibleIds = useMemo(() => new Set(visible.map((s) => s.rec.order.orderId)), [visible])
   const list = useMemo(() => {
     const base = term ? visible.filter((s) => matchesTerm(s, term)) : visible
-    return [...base].sort((a, b) => (b.rec.order.createdAt ?? 0) - (a.rec.order.createdAt ?? 0))
+    return base.toSorted((a, b) => (b.rec.order.createdAt ?? 0) - (a.rec.order.createdAt ?? 0))
   }, [visible, term])
   const hiddenMatches = useMemo(
     () => (term ? snapshots.filter((s) => !visibleIds.has(s.rec.order.orderId) && matchesTerm(s, term)).length : 0),

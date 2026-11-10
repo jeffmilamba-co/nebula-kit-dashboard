@@ -95,7 +95,6 @@ export function normalizeEvents(rows: Row[]): EventsResult {
       raw,
       tz: ts.tz,
       source: normEnum(row.source),
-      mergedEventIds: [],
     })
   })
   return { events, missingFields, badTimestamp, badTimestampSamples, tzCounts }

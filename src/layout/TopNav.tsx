@@ -52,9 +52,11 @@ export function TopNav() {
   return (
     <header className="sticky top-0 z-40 bg-surface shadow-[0_1px_0_rgba(0,0,0,0.08)]">
       <div className="mx-auto flex h-[52px] max-w-[1128px] items-center gap-2 px-4">
-        <a href={linkTo('/')} className="flex shrink-0 items-center gap-2" aria-label="Kit Ops overview">
-          <span className="flex size-[34px] items-center justify-center rounded bg-brand text-[19px] font-bold text-white">N</span>
-          <span className="hidden text-sm leading-tight font-semibold text-ink lg:block">
+        <a href={linkTo('/')} className="flex shrink-0 items-center gap-2">
+          <span className="flex size-[34px] items-center justify-center rounded bg-brand text-[19px] font-bold text-white" aria-hidden>
+            N
+          </span>
+          <span className="sr-only text-sm leading-tight font-semibold text-ink lg:not-sr-only lg:block">
             Kit Ops
             <span className="block text-[11px] font-normal text-ink-2">Nebula Genomics</span>
           </span>
@@ -78,22 +80,23 @@ export function TopNav() {
                 key={item.path}
                 href={linkTo(item.path)}
                 aria-current={active ? 'page' : undefined}
-                aria-label={item.label}
                 className={`relative flex min-w-[40px] flex-col items-center justify-center px-1 sm:min-w-[64px] md:min-w-[80px] ${
                   active
                     ? 'text-ink after:absolute after:inset-x-1 after:bottom-0 after:h-[2px] after:bg-ink'
                     : 'text-ink-2 hover:text-ink'
                 }`}
               >
+                {/* First in the DOM so the name reads "Follow-up 321 overdue"; shown below the icon. */}
+                <span className="sr-only order-last text-xs md:not-sr-only">{item.label}</span>
                 <span className="relative">
                   <Icon size={24} strokeWidth={active ? 2.25 : 1.75} aria-hidden />
                   {item.section === 'follow-up' && overdueCount > 0 && (
                     <span className="absolute -top-1 -right-3 min-w-[18px] rounded-full bg-danger px-1 text-center text-[11px] leading-[18px] font-semibold text-white">
                       {overdueCount > 99 ? '99+' : overdueCount}
+                      <span className="sr-only"> overdue</span>
                     </span>
                   )}
                 </span>
-                <span className="hidden text-xs md:block">{item.label}</span>
               </a>
             )
           })}

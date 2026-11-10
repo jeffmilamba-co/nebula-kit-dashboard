@@ -1,7 +1,6 @@
 import { ChartColumn, CircleCheck, Table2, TriangleAlert } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { useDerived } from '../app/derived.tsx'
 import { exclusions, kpis, stageDistribution, weeklyVolume } from '../data/metrics.ts'
 import type { StageRow } from '../data/metrics.ts'
@@ -13,6 +12,7 @@ import { fmtDate, fmtDays, fmtDay, fmtInt, fmtPct, fmtShortDay, productLabel, st
 import { Button } from '../ui/Button.tsx'
 import { HealthIcon } from '../ui/Badge.tsx'
 import { Card, CardHeader, Legend } from '../ui/Card.tsx'
+import { StackedColumnChart } from '../ui/StackedColumnChart.tsx'
 import { StageIcon } from '../ui/StageIcon.tsx'
 
 function Stat({
@@ -158,19 +158,25 @@ function WhereNowCard() {
           <li key={r.stage}>
             <a
               href={linkTo('/follow-up', { stage: r.stage, risk: '1' })}
-              aria-label={`${r.label}: ${r.total} orders — ${r.onTrack} on track, ${r.atRisk} at risk, ${r.overdue} overdue`}
               className="group grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 rounded-md px-2 py-2 hover:bg-hover sm:grid-cols-[170px_minmax(0,1fr)_auto]"
             >
               <span className="flex items-center gap-2 text-sm text-ink">
                 <StageIcon stage={r.stage} size={16} className="shrink-0 text-ink-2" />
                 {r.label}
               </span>
-              <span className="order-3 col-span-2 sm:order-none sm:col-span-1">
+              <span className="order-3 col-span-2 sm:order-none sm:col-span-1" aria-hidden>
                 <StageBar row={r} max={max} />
               </span>
               <span className="text-right text-sm whitespace-nowrap tabular-nums">
                 <b>{fmtInt(r.total)}</b>
-                {r.overdue > 0 && <span className="ml-1.5 text-xs font-semibold text-danger">{fmtInt(r.overdue)} overdue</span>}
+                <span className="sr-only"> orders</span>
+                {r.overdue > 0 && (
+                  <span className="ml-1.5 text-xs font-semibold text-danger">
+                    <span className="sr-only">, </span>
+                    {fmtInt(r.overdue)} overdue
+                  </span>
+                )}
+                <span className="sr-only">{`, ${fmtInt(r.atRisk)} at risk, ${fmtInt(r.onTrack)} on track`}</span>
               </span>
             </a>
           </li>
@@ -186,7 +192,7 @@ function WhereNowCard() {
   )
 }
 
-/** Clean, round y-axis ticks (0 / 50 / 100 …) instead of the chart library's arbitrary steps. */
+/** Clean, round y-axis ticks (0 / 50 / 100 …). */
 function niceTicks(max: number, count = 5): number[] {
   if (max <= 0) return [0, 1]
   const raw = max / count
@@ -202,8 +208,7 @@ function VolumeCard() {
   const [asTable, setAsTable] = useState(false)
   const weeks = useMemo(() => weeklyVolume(visible), [visible])
   const products = model.options.products.filter((p) => weeks.some((w) => w.counts[p]))
-  const data = weeks.map((w) => ({ week: w.week, total: w.total, ...Object.fromEntries(products.map((p) => [p, w.counts[p] ?? 0])) }))
-  const byWeek = new Map(weeks.map((w) => [w.week, w]))
+  const series = products.map((p) => ({ key: p, label: productLabel(p), color: productColor(p, model.options.products) }))
   const yTicks = niceTicks(Math.max(0, ...weeks.map((w) => w.total)))
 
   return (
@@ -251,67 +256,16 @@ function VolumeCard() {
         </div>
       ) : (
         <>
-          <Legend items={products.map((p) => ({ color: productColor(p, model.options.products), label: productLabel(p) }))} />
+          <Legend items={series.map((s) => ({ color: s.color, label: s.label }))} />
           <div className="h-[240px] px-2 pb-3">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={data} margin={{ top: 8, right: 12, bottom: 0, left: -12 }} barCategoryGap="20%">
-                <CartesianGrid vertical={false} stroke="#e1e0d9" />
-                <XAxis
-                  dataKey="week"
-                  tickFormatter={(w: string) => fmtShortDay(w)}
-                  tick={{ fontSize: 11, fill: 'rgba(0,0,0,0.6)' }}
-                  tickLine={false}
-                  axisLine={{ stroke: '#c3c2b7' }}
-                  minTickGap={18}
-                />
-                <YAxis
-                  allowDecimals={false}
-                  ticks={yTicks}
-                  domain={[0, yTicks[yTicks.length - 1]]}
-                  tick={{ fontSize: 11, fill: 'rgba(0,0,0,0.6)' }}
-                  tickLine={false}
-                  axisLine={false}
-                  width={44}
-                />
-                <Tooltip
-                  cursor={{ fill: 'rgba(0,0,0,0.04)' }}
-                  isAnimationActive={false}
-                  content={({ active, label }) => {
-                    const w = active && typeof label === 'string' ? byWeek.get(label) : undefined
-                    if (!w) return null
-                    return (
-                      <div className="rounded-md bg-surface px-3 py-2 text-xs shadow-pop">
-                        <div className="mb-1 font-semibold">Week of {fmtDay(w.week)}</div>
-                        {products.map((p) => (
-                          <div key={p} className="flex items-center gap-2">
-                            <span className="h-[2px] w-3" style={{ backgroundColor: productColor(p, model.options.products) }} aria-hidden />
-                            <b className="tabular-nums">{fmtInt(w.counts[p] ?? 0)}</b>
-                            <span className="text-ink-2">{productLabel(p)}</span>
-                          </div>
-                        ))}
-                        <div className="mt-1 border-t border-line pt-1">
-                          <b className="tabular-nums">{fmtInt(w.total)}</b> <span className="text-ink-2">total</span>
-                        </div>
-                      </div>
-                    )
-                  }}
-                />
-                {products.map((p, i) => (
-                  <Bar
-                    key={p}
-                    dataKey={p}
-                    name={productLabel(p)}
-                    stackId="volume"
-                    fill={productColor(p, model.options.products)}
-                    stroke="#ffffff"
-                    strokeWidth={1}
-                    maxBarSize={24}
-                    radius={i === products.length - 1 ? [4, 4, 0, 0] : 0}
-                    isAnimationActive={false}
-                  />
-                ))}
-              </BarChart>
-            </ResponsiveContainer>
+            <StackedColumnChart
+              label="Orders placed per week, stacked by product"
+              columns={weeks.map((w) => ({ key: w.week, values: w.counts, total: w.total }))}
+              series={series}
+              yTicks={yTicks}
+              xLabel={fmtShortDay}
+              tooltipTitle={(week) => `Week of ${fmtDay(week)}`}
+            />
           </div>
         </>
       )}

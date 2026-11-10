@@ -57,3 +57,23 @@ describe('UTC day and week keys', () => {
     expect(utcWeekStart(Date.UTC(2026, 10, 15))).toBe('2026-11-09') // Sunday
   })
 })
+
+describe('calendar arithmetic (no Date objects on the hot path)', () => {
+  it('applies the Gregorian leap-year rules and rejects two-digit years', () => {
+    expect(parseTimestamp('2024-02-29T00:00:00Z')).not.toBeNull()
+    expect(parseTimestamp('2000-02-29')).not.toBeNull()
+    expect(parseTimestamp('2026-02-29')).toBeNull()
+    expect(parseTimestamp('2100-02-29')).toBeNull()
+    expect(parseTimestamp('2026-04-31')).toBeNull()
+    expect(parseTimestamp('0026-05-01T00:00:00Z')).toBeNull()
+  })
+
+  it('agrees with Date for every day across decades, including before 1970', () => {
+    for (let ms = Date.UTC(1965, 0, 1, 13); ms < Date.UTC(2035, 0, 1); ms += 86_400_000 * 0.77) {
+      const d = new Date(ms)
+      expect(utcDay(ms)).toBe(d.toISOString().slice(0, 10))
+      const monday = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - ((d.getUTCDay() + 6) % 7))
+      expect(utcWeekStart(ms)).toBe(new Date(monday).toISOString().slice(0, 10))
+    }
+  })
+})

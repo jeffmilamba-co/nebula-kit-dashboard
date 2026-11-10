@@ -13,7 +13,7 @@
   --color-brand-soft: #e8f1fb;
   --color-ink: rgb(0 0 0 / 0.9);
   --color-ink-2: rgb(0 0 0 / 0.6);
-  --color-ink-3: rgb(0 0 0 / 0.45);
+  --color-ink-3: rgb(0 0 0 / 0.56); /* lightest text that still meets WCAG AA 4.5:1 on the canvas */
   --color-line: rgb(0 0 0 / 0.08);
   --color-line-strong: rgb(0 0 0 / 0.15);
   --color-hover: rgb(0 0 0 / 0.05);

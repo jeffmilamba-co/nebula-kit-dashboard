@@ -29,11 +29,10 @@ export function parseTimestamp(raw: string | null | undefined): ParsedTimestamp 
   const minute = Number(m[5] ?? 0)
   const second = Number(m[6] ?? 0)
   const millis = m[7] ? Math.floor(Number(`0.${m[7]}`) * 1000) : 0
-  if (month < 1 || month > 12 || day < 1 || hour > 23 || minute > 59 || second > 59) return null
-
-  // Reject impossible dates such as 2026-02-30 (Date.UTC would roll them over).
-  const probe = new Date(Date.UTC(year, month - 1, day))
-  if (probe.getUTCFullYear() !== year || probe.getUTCMonth() !== month - 1 || probe.getUTCDate() !== day) return null
+  // Reject impossible dates such as 2026-02-30 (Date.UTC would roll them over) and years below 100
+  // (Date.UTC would read them as 19xx). Checked arithmetically: this runs once per CSV row.
+  if (year < 100 || month < 1 || month > 12 || day < 1 || day > daysInMonth(year, month)) return null
+  if (hour > 23 || minute > 59 || second > 59) return null
 
   let ms = Date.UTC(year, month - 1, day, hour, minute, second, millis)
   const zone = m[8]?.toUpperCase()
@@ -51,9 +50,28 @@ export function parseTimestamp(raw: string | null | undefined): ParsedTimestamp 
   return { ms, tz: 'offset', offsetMin }
 }
 
+const MONTH_DAYS = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+
+function daysInMonth(year: number, month: number): number {
+  const leap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0
+  return month === 2 && leap ? 29 : MONTH_DAYS[month - 1]
+}
+
+// Day strings are requested once per order on load and again on every filter change (weekly
+// volume), but a dataset spans only a few hundred distinct days, so formatting is memoized.
+const dayCache = new Map<number, string>()
+const DAY_CACHE_LIMIT = 50_000
+
 /** UTC calendar day, YYYY-MM-DD. */
 export function utcDay(ms: number): string {
-  return new Date(ms).toISOString().slice(0, 10)
+  const n = Math.floor(ms / DAY_MS)
+  let s = dayCache.get(n)
+  if (s === undefined) {
+    s = new Date(ms).toISOString().slice(0, 10)
+    if (dayCache.size >= DAY_CACHE_LIMIT) dayCache.clear()
+    dayCache.set(n, s)
+  }
+  return s
 }
 
 /** Start of a UTC day given as YYYY-MM-DD. */
@@ -69,9 +87,10 @@ export function dayEnd(day: string): number {
 
 /** Monday of the UTC week containing ms, as YYYY-MM-DD. */
 export function utcWeekStart(ms: number): string {
-  const d = new Date(ms)
-  const sinceMonday = (d.getUTCDay() + 6) % 7
-  return utcDay(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - sinceMonday))
+  const day = Math.floor(ms / DAY_MS)
+  // 1970-01-01 (day 0) was a Thursday, i.e. 3 days after a Monday.
+  const sinceMonday = (((day + 3) % 7) + 7) % 7
+  return utcDay((day - sinceMonday) * DAY_MS)
 }
 
 export function addDays(day: string, n: number): string {

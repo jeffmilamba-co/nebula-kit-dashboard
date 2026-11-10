@@ -77,7 +77,7 @@ export function expectedView(model: Model, overrides: Partial<Filters> = {}, asO
   return {
     kpis: kpis(visible),
     stages: stageDistribution(visible),
-    weeks: weeklyVolume(visible).length,
+    weeks: weeklyVolume(visible),
     turnaround: stageStats(visible).get('all') ?? [],
     overdue: queue.filter((i) => i.snap.health === 'overdue'),
     atRisk: queue.filter((i) => i.snap.health === 'at_risk'),
