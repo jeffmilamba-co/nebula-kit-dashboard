@@ -14,7 +14,7 @@ export default defineConfig({
       output: {
         codeSplitting: {
           // React changes far less often than the app, so it gets its own long-cached chunk.
-          // Everything else splits along the lazy-loaded pages (see src/app/pages.ts).
+          // Everything else splits along the lazy-loaded pages (see src/app/pages.tsx).
           groups: [{ name: 'react', test: /[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/ }],
         },
       },

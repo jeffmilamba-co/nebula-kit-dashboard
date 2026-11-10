@@ -1,6 +1,6 @@
-// Route → page component, each page in its own chunk (Recharts, the heaviest dependency, only ships
-// with the overview). The current page starts downloading at startup, in parallel with the data;
-// the others are fetched when the browser is idle, so switching tabs never waits on the network.
+// Route → page component, each page in its own chunk. The current page starts downloading at
+// startup, in parallel with the data; the others are fetched when the browser is idle, so switching
+// tabs never waits on the network.
 import { use } from 'react'
 import type { ComponentType } from 'react'
 
