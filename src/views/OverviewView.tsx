@@ -46,7 +46,9 @@ function Stat({
       {body}
     </a>
   ) : (
-    <div className={cls}>{body}</div>
+    <div role="group" aria-label={label} className={cls}>
+      {body}
+    </div>
   )
 }
 

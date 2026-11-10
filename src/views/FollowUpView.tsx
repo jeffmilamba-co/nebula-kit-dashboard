@@ -33,15 +33,22 @@ export function FollowUpView() {
     for (const i of base) if (!stage || i.snap.stage === stage) m.set(i.owner, (m.get(i.owner) ?? 0) + 1)
     return m
   }, [base, stage])
+  // Age bands only apply to customers holding a kit, so offer them only when that queue is in view.
+  const bandsApply = (!owner || owner === 'customer_care') && (!stage || stage === 'with_customer')
+  const activeBand = bandsApply ? band : null
   const items = useMemo(
-    () => base.filter((i) => (!owner || i.owner === owner) && (!stage || i.snap.stage === stage) && (!band || i.ageBand === band)),
-    [base, owner, stage, band],
+    () =>
+      base.filter(
+        (i) => (!owner || i.owner === owner) && (!stage || i.snap.stage === stage) && (!activeBand || i.ageBand === activeBand),
+      ),
+    [base, owner, stage, activeBand],
   )
   const bandCounts = useMemo(() => {
     const m = new Map<string, number>()
-    for (const i of base) if (i.ageBand && (!owner || i.owner === owner)) m.set(i.ageBand, (m.get(i.ageBand) ?? 0) + 1)
+    if (!bandsApply) return m
+    for (const i of base) if (i.ageBand) m.set(i.ageBand, (m.get(i.ageBand) ?? 0) + 1)
     return m
-  }, [base, owner])
+  }, [base, bandsApply])
   const pageItems = items.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
   const total = (stage ? base.filter((i) => i.snap.stage === stage) : base).length
 
@@ -130,7 +137,7 @@ export function FollowUpView() {
             <Download size={16} aria-hidden /> Export CSV
           </Button>
         </div>
-        {(stage || owner === 'customer_care' || (!owner && bandCounts.size > 0)) && (
+        {(stage || bandCounts.size > 0) && (
           <div className="flex flex-wrap items-center gap-2 px-4 pb-3">
             {stage && (
               <button type="button" className={pillClass(true)} onClick={() => setQuery({ stage: null, page: null })}>
@@ -138,15 +145,14 @@ export function FollowUpView() {
                 <X size={14} aria-label="Remove stage filter" />
               </button>
             )}
-            {(owner === 'customer_care' || !owner) &&
-              bandCounts.size > 0 &&
+            {bandCounts.size > 0 &&
               BANDS.map((b) => (
                 <button
                   key={b.key}
                   type="button"
-                  className={pillClass(band === b.key)}
-                  aria-pressed={band === b.key}
-                  onClick={() => setQuery({ band: band === b.key ? null : b.key, page: null })}
+                  className={pillClass(activeBand === b.key)}
+                  aria-pressed={activeBand === b.key}
+                  onClick={() => setQuery({ band: activeBand === b.key ? null : b.key, page: null })}
                 >
                   With customer {b.label} · {fmtInt(bandCounts.get(b.key) ?? 0)}
                 </button>

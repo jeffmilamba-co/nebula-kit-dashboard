@@ -92,7 +92,10 @@ export function TurnaroundView() {
   const [mode, setMode] = useState<'product' | 'all'>('product')
   const byProduct = useMemo(() => stageStats(visible, (s) => s.rec.order.product), [visible])
   const overall = useMemo(() => stageStats(visible).get('all') ?? [], [visible])
-  const kitProducts = model.options.products.filter((p) => !NO_KIT_PRODUCTS.has(p) && byProduct.has(p))
+  const kitProducts = useMemo(
+    () => model.options.products.filter((p) => !NO_KIT_PRODUCTS.has(p) && byProduct.has(p)),
+    [model, byProduct],
+  )
 
   const groups: Group[] =
     mode === 'product'
@@ -192,9 +195,13 @@ export function TurnaroundView() {
             {gap.rel < 0.15 ? 'Products move through the pipeline at essentially the same pace.' : 'Check the rows below for where they diverge.'}
           </p>
         )}
-        {TRANSITIONS.map((t) => (
-          <TransitionBlock key={t.key} info={t} groups={groups} overall={overall.find((s) => s.key === t.key)!} />
-        ))}
+        {kitProducts.length === 0 ? (
+          <p className="border-t border-line px-4 py-6 text-sm text-ink-2">
+            No kit orders match the current filters. Upload-only orders have no kit, so they have no stage turnaround.
+          </p>
+        ) : (
+          TRANSITIONS.map((t) => <TransitionBlock key={t.key} info={t} groups={groups} overall={overall.find((s) => s.key === t.key)!} />)
+        )}
       </Card>
     </MainWithRail>
   )

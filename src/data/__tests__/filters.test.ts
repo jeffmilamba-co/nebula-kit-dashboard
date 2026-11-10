@@ -47,6 +47,13 @@ describe('filters', () => {
     expect(q.get('q')).toBe('ord_1')
   })
 
+  it('filters by product and country', () => {
+    const pred = compileFilter({ ...defaultFilters(options), products: ['wgs_100x'], countries: ['CA'] })
+    expect(pred(mkOrder({ product: 'wgs_100x', country: 'CA' }))).toBe(true)
+    expect(pred(mkOrder({ product: 'wgs_100x', country: 'US' }))).toBe(false)
+    expect(pred(mkOrder({ product: 'wgs_30x', country: 'CA' }))).toBe(false)
+  })
+
   it('compares UTC days inclusively', () => {
     const pred = compileFilter({ ...defaultFilters(options), from: '2026-06-15', to: '2026-06-15' })
     expect(pred(mkOrder({}))).toBe(true)
