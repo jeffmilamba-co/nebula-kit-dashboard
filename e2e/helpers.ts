@@ -90,7 +90,8 @@ export const n = fmtInt
 export async function open(page: Page, hash = '#/') {
   // Relative to baseURL, so it also works when the app lives under a sub-path (GitHub Pages).
   await page.goto(hash)
-  await expect(page.getByRole('navigation', { name: 'Main' })).toBeVisible()
+  // First load fetches ~0.9 MB (gzipped JS + sample CSVs); allow for a slow link to a deployed copy.
+  await expect(page.getByRole('navigation', { name: 'Main' })).toBeVisible({ timeout: 30_000 })
 }
 
 /** The big number on a KPI tile (tile = label, value, sub-line). */
