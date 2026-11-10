@@ -6,3 +6,5 @@ dist
 __MACOSX
 *.log
 coverage
+test-results
+playwright-report
